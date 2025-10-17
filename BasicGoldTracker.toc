@@ -2,7 +2,7 @@
 ## Title: BasicGoldTracker
 ## Notes: Tracks gold earned and spent per character
 ## Author: Roadw2k
-## Version: 0.1.0
+## Version: 11.2.5
 ## SavedVariables: GoldTrackerDB
 ## IconTexture: Interface\Icons\INV_Misc_Coin_01
 ## OptionalDeps: Ace3, LibDBIcon-1.0
@@ -17,4 +17,4 @@ libs\AceDB-3.0\AceDB-3.0.lua
 libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
 libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
 
-GoldTracker.lua
+BasicGoldTracker.lua
