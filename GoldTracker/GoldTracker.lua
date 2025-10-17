@@ -67,8 +67,13 @@ function GoldTracker:OnEnable()
 end
 
 function GoldTracker:SlashCommand(input)
+    self:Print("Slash command received: " .. (input or "empty"))
     if input == "reset" then
         self:ResetStats()
+    elseif input == "debug" then
+        self:Print("Frame exists: " .. tostring(self.frame ~= nil))
+        self:Print("Frame shown: " .. tostring(self.frame and self.frame:IsShown()))
+        self:Print("Player name: " .. tostring(playerName))
     else
         self:ToggleWindow()
     end
@@ -194,7 +199,17 @@ end
 
 -- Create the main window
 function GoldTracker:CreateWindow()
+    self:Print("CreateWindow function started")
+    
     local frame = CreateFrame("Frame", "GoldTrackerFrame", UIParent, "BasicFrameTemplateWithInset")
+    
+    if not frame then
+        self:Print("ERROR: CreateFrame returned nil!")
+        return
+    end
+    
+    self:Print("Frame created, setting properties...")
+    
     frame:SetSize(400, 300)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
@@ -258,10 +273,16 @@ function GoldTracker:CreateWindow()
     end)
     
     self.frame = frame
+    self:Print("Frame stored in self.frame")
 end
 
 -- Toggle window
 function GoldTracker:ToggleWindow()
+    if not self.frame then
+        self:Print("Error: Frame not created yet!")
+        return
+    end
+    
     if self.frame:IsShown() then
         self.frame:Hide()
     else
