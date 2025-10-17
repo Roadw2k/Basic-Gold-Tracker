@@ -63,7 +63,7 @@ The addon tracks your gold balance continuously and updates statistics whenever 
 
 ## Screenshots
 
-![GoldTracker Window](GoldTracker.png)
+![GoldTracker Window](goldtracker.png)
 
 ## FAQ
 
