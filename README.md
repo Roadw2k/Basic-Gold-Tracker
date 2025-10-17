@@ -17,7 +17,7 @@ A lightweight World of Warcraft addon for tracking gold earned and spent across 
 ### Manual Installation
 
 1. Download the latest release
-2. Extract the `GoldTracker` folder to your `World of Warcraft\_retail_\Interface\AddOns\` directory
+2. Extract the `BasicGoldTracker` folder to your `World of Warcraft\_retail_\Interface\AddOns\` directory
 3. Restart World of Warcraft or type `/reload` in-game
 
 ## Usage
