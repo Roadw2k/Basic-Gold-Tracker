@@ -1,0 +1,20 @@
+## Interface: 110002
+## Title: BasicGoldTracker
+## Notes: Tracks gold earned and spent per character
+## Author: Roadw2k
+## Version: 0.1.0
+## SavedVariables: GoldTrackerDB
+## IconTexture: Interface\Icons\INV_Misc_Coin_01
+## OptionalDeps: Ace3, LibDBIcon-1.0
+
+libs\Libstub\Libstub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+libs\AceAddon-3.0\AceAddon-3.0.lua
+libs\AceConsole-3.0\AceConsole-3.0.lua
+libs\AceGUI-3.0\AceGUI-3.0.xml
+libs\AceConfig-3.0\AceConfig-3.0.xml
+libs\AceDB-3.0\AceDB-3.0.lua
+libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+GoldTracker.lua
