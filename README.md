@@ -20,13 +20,6 @@ A lightweight World of Warcraft addon for tracking gold earned and spent across 
 2. Extract the `GoldTracker` folder to your `World of Warcraft\_retail_\Interface\AddOns\` directory
 3. Restart World of Warcraft or type `/reload` in-game
 
-### Dependencies
-
-This addon requires the following libraries (included in release):
-- **Ace3** - Core addon framework
-- **LibDBIcon-1.0** - Minimap button functionality
-- **LibDataBroker-1.1** - Data broker support
-
 ## Usage
 
 ### Opening the Tracker
@@ -81,7 +74,7 @@ A: Each character has independent statistics. The addon tracks per-character, no
 A: The addon will record your starting gold as a baseline without adding it to "earned" statistics.
 
 **Q: Can I reset my statistics?**  
-A: Yes! Click the "Reset Stats" button in the window, right-click the minimap icon, or use `/gt reset`.
+A: Yes! Use `/gt reset` or do it from the GUI.
 
 **Q: Does this affect game performance?**  
 A: No! GoldTracker is extremely lightweight and only updates when your gold changes.
