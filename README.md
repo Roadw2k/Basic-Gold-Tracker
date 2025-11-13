@@ -58,12 +58,14 @@ GoldTracker automatically monitors your gold changes and categorizes them:
 
 - **Gold Gained** - Looting, quest rewards, mail, sales, etc.
 - **Gold Spent** - Purchases, repairs, auction house fees, mail costs, etc.
+- **Net** - Profit/Loss for both all-time and sessions statistics.
 
 The addon tracks your gold balance continuously and updates statistics whenever your gold changes. Session statistics reset each time you log in, while all-time statistics persist forever (until manually reset).
 
 ## Screenshots
 
-![GoldTracker Window](goldtracker1.png)
+![GoldTracker Window](goldtracker.png)
+![MiniMap Window](minimap.jpg)
 
 ## FAQ
 
@@ -110,3 +112,12 @@ This addon is released under the MIT License. See LICENSE file for details.
 - Slash commands
 - ESC key support
 - First login detection
+
+### Version 1.0.1
+ - Bug fixes
+ - Add AceEvent library to the addon.
+
+### Version 1.1
+ - Improved the UI to look more uniform.
+ - `NEW` You can now hover over the minimap icon to get the same information.
+ - `NEW` Net profit/loss for both All-Time and Session statistics.
