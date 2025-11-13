@@ -1,4 +1,4 @@
-## Interface: 110002
+## Interface: 110205
 ## Title: BasicGoldTracker
 ## Notes: Tracks gold earned and spent per character
 ## Author: Roadw2k
