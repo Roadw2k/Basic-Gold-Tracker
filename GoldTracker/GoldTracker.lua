@@ -82,7 +82,6 @@ function GoldTracker:OnEnable()
 end
 
 function GoldTracker:SlashCommand(input)
-    self:Print("Slash command received: " .. (input or "empty"))
     if input == "reset" then
         self:ResetStats()
     elseif input == "debug" then
@@ -168,7 +167,7 @@ function GoldTracker:InitCharacter()
     self.db.global.characters[playerName].sessionEarned = 0
     self.db.global.characters[playerName].sessionSpent = 0
     
-    self:Print("Loaded! Type /goldtracker or /gt to open, or click the minimap button.")
+    self:Print("Type /goldtracker or /gt to open, or click the minimap button.")
 end
 
 -- Update gold tracking
@@ -242,7 +241,6 @@ end
 
 -- Create the main window
 function GoldTracker:CreateWindow()
-    self:Print("CreateWindow function started")
     
     local frame = CreateFrame("Frame", "GoldTrackerFrame", UIParent, "BasicFrameTemplateWithInset")
     
@@ -250,9 +248,7 @@ function GoldTracker:CreateWindow()
         self:Print("ERROR: CreateFrame returned nil!")
         return
     end
-    
-    self:Print("Frame created, setting properties...")
-    
+      
     frame:SetSize(420, 320)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
@@ -329,7 +325,6 @@ function GoldTracker:CreateWindow()
     end)
     
     self.frame = frame
-    self:Print("Frame stored in self.frame")
 end
 
 -- Toggle window
