@@ -1,8 +1,8 @@
-## Interface: 110205
+## Interface: 120000, 110207
 ## Title: BasicGoldTracker
 ## Notes: Tracks gold earned and spent per character
 ## Author: Roadw2k
-## Version: 11.2.5
+## Version: 11.2.7
 ## SavedVariables: GoldTrackerDB
 ## X-Curse-Project-ID: 1366654
 ## IconTexture: Interface\Icons\INV_Misc_Coin_01
