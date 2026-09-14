@@ -5,11 +5,13 @@ A lightweight World of Warcraft addon for tracking gold earned and spent across 
 ## Features
 
 - **Per-Character Tracking** - Each character has independent gold statistics
+- **Account Overview** - See the last known balance and all-time net for every tracked character, plus account-wide totals
 - **Session Statistics** - Track gold earned and spent during your current play session
 - **All-Time Statistics** - View total gold earned and spent across all sessions
 - **First Login Detection** - Won't count your starting gold as "earned" on first use
 - **Minimap Button** - Easy access via draggable minimap icon
 - **Clean UI** - Simple, movable window with clear statistics
+- **Remembered Window Position** - The tracker reopens where you last moved it, including after login or `/reload`
 - **Persistent Data** - All data is saved between sessions and survives logouts
 
 ## Installation
@@ -51,6 +53,11 @@ Displays your current gold amount in real-time.
 ### All Time
 - **Earned** - Total gold earned across all sessions on this character
 - **Spent** - Total gold spent across all sessions on this character
+
+### Account Overview
+- **Current Total** - Sum of the last known gold balance for every tracked character
+- **All-Time Net** - Combined earned-minus-spent total across every tracked character
+- **Character List** - Current balance and all-time net for each character, with scrolling for larger rosters
 
 ## How It Works
 
@@ -118,6 +125,15 @@ This addon is released under the MIT License. See LICENSE file for details.
  - Add AceEvent library to the addon.
 
 ### Version 1.1
- - Improved the UI to look more uniform.
- - `NEW` You can now hover over the minimap icon to get the same information.
- - `NEW` Net profit/loss for both All-Time and Session statistics.
+- Improved the UI to look more uniform.
+- You can now hover over the minimap icon to get the same information.
+- Net profit/loss for both All-Time and Session statistics.
+
+### Version 1.2
+- `NEW` Account Overview with combined current gold and all-time net totals.
+- `NEW` Scrollable character summary showing each character's last known balance and all-time net.
+- `NEW` The tracker window now remembers its position after login or `/reload`.
+- `NEW` Account-wide totals are now included in the minimap tooltip.
+- Redesigned the main tracker window with balance, session, all-time, and account cards.
+- Improved the minimap tooltip with aligned columns, clearer sections, and a cleaner coin icon.
+- Added active-character highlighting and alternating rows to the account summary.
