@@ -31,52 +31,19 @@ local GoldTrackerLDB = LibStub("LibDataBroker-1.1"):NewDataObject("GoldTracker",
     text = "GoldTracker",
     icon = "Interface\\Icons\\INV_Misc_Coin_01",
     OnClick = function(clickedframe, button)
+        GoldTracker:HideMinimapTooltip()
+
         if button == "LeftButton" then
             GoldTracker:ToggleWindow()
         elseif button == "RightButton" then
             GoldTracker:ResetStats()
         end
     end,
-    OnTooltipShow = function(tooltip)
-        if not tooltip or not tooltip.AddLine or not tooltip.AddDoubleLine then return end
-
-        tooltip:AddLine("|cFFFFD36AGold Tracker|r")
-
-        -- Add a compact two-column snapshot if player data is initialized
-        if playerName and GoldTracker.db and GoldTracker.db.global.characters[playerName] then
-            local d = GoldTracker.db.global.characters[playerName]
-            local accountGold = 0
-            local accountNet = 0
-
-            for _, data in pairs(GoldTracker.db.global.characters) do
-                accountGold = accountGold + (data.lastGold or 0)
-                accountNet = accountNet + (data.totalEarned or 0) - (data.totalSpent or 0)
-            end
-
-            tooltip:AddLine(playerName, 0.72, 0.72, 0.72)
-            tooltip:AddDoubleLine("Current Gold", GoldTracker:FormatGold(d.lastGold), 1, 1, 1, 1, 1, 1)
-
-            tooltip:AddLine(" ")
-            tooltip:AddLine("|cFFFFD36AThis Session|r")
-            tooltip:AddDoubleLine("Earned", GoldTracker:FormatGold(d.sessionEarned), 0.82, 0.82, 0.82, 1, 1, 1)
-            tooltip:AddDoubleLine("Spent", GoldTracker:FormatGold(d.sessionSpent), 0.82, 0.82, 0.82, 1, 1, 1)
-            tooltip:AddDoubleLine("Net", GoldTracker:FormatProfit(d.sessionEarned - d.sessionSpent), 0.82, 0.82, 0.82, 1, 1, 1)
-
-            tooltip:AddLine(" ")
-            tooltip:AddLine("|cFFFFD36AAll Time|r")
-            tooltip:AddDoubleLine("Earned", GoldTracker:FormatGold(d.totalEarned), 0.82, 0.82, 0.82, 1, 1, 1)
-            tooltip:AddDoubleLine("Spent", GoldTracker:FormatGold(d.totalSpent), 0.82, 0.82, 0.82, 1, 1, 1)
-            tooltip:AddDoubleLine("Net", GoldTracker:FormatProfit(d.totalEarned - d.totalSpent), 0.82, 0.82, 0.82, 1, 1, 1)
-
-            tooltip:AddLine(" ")
-            tooltip:AddLine("|cFFFFD36AAccount|r")
-            tooltip:AddDoubleLine("Current Total", GoldTracker:FormatGold(accountGold), 0.82, 0.82, 0.82, 1, 1, 1)
-            tooltip:AddDoubleLine("All-Time Net", GoldTracker:FormatProfit(accountNet), 0.82, 0.82, 0.82, 1, 1, 1)
-        end
-
-        tooltip:AddLine(" ")
-        tooltip:AddDoubleLine("Left-click", "Open tracker", 0.65, 0.65, 0.65, 0.9, 0.9, 0.9)
-        tooltip:AddDoubleLine("Right-click", "Reset character", 0.65, 0.65, 0.65, 0.9, 0.9, 0.9)
+    OnEnter = function(anchor)
+        GoldTracker:ShowMinimapTooltip(anchor)
+    end,
+    OnLeave = function()
+        GoldTracker:HideMinimapTooltip()
     end,
 })
 
@@ -146,6 +113,179 @@ function GoldTracker:FormatProfit(copper)
         return "|cFFFF4444" .. prefix .. colored .. "|r"
     else
         return "|cFFFFFFFF" .. self:FormatGold(0) .. "|r"
+    end
+end
+
+-- Build the custom minimap hover panel with the same styling as the main window
+function GoldTracker:CreateMinimapTooltip()
+    if self.minimapTooltip then return end
+
+    local tooltip = CreateFrame("Frame", "GoldTrackerMinimapTooltip", UIParent, "BackdropTemplate")
+    tooltip:SetSize(360, 400)
+    tooltip:SetFrameStrata("TOOLTIP")
+    tooltip:SetClampedToScreen(true)
+    tooltip:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    tooltip:SetBackdropColor(0.012, 0.014, 0.022, 0.97)
+    tooltip:SetBackdropBorderColor(0.72, 0.49, 0.12, 1)
+    tooltip:Hide()
+
+    local function CreateCard(parent)
+        local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        card:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        card:SetBackdropColor(0.025, 0.028, 0.04, 0.92)
+        card:SetBackdropBorderColor(0.45, 0.34, 0.12, 0.9)
+        return card
+    end
+
+    local function AddCardTitle(card, text)
+        local title = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("TOPLEFT", card, "TOPLEFT", 10, -9)
+        title:SetText("|cFFFFD36A" .. text .. "|r")
+
+        local accent = card:CreateTexture(nil, "ARTWORK")
+        accent:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+        accent:SetSize(34, 2)
+        accent:SetColorTexture(0.95, 0.66, 0.12, 0.9)
+        return title
+    end
+
+    local function AddMetric(card, label, y)
+        local labelText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        labelText:SetPoint("TOPLEFT", card, "TOPLEFT", 10, y)
+        labelText:SetText(label)
+        labelText:SetTextColor(0.72, 0.72, 0.72)
+
+        local value = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        value:SetPoint("TOPRIGHT", card, "TOPRIGHT", -10, y)
+        value:SetWidth(108)
+        value:SetJustifyH("RIGHT")
+        return value
+    end
+
+    local coin = tooltip:CreateTexture(nil, "ARTWORK")
+    coin:SetPoint("TOPLEFT", tooltip, "TOPLEFT", 12, -11)
+    coin:SetSize(34, 34)
+    coin:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
+    coin:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local title = tooltip:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", coin, "TOPRIGHT", 10, -1)
+    title:SetText("|cFFFFD36AGold Tracker|r")
+
+    tooltip.characterName = tooltip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    tooltip.characterName:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+    tooltip.characterName:SetTextColor(0.7, 0.7, 0.7)
+
+    local balanceCard = CreateCard(tooltip)
+    balanceCard:SetPoint("TOPLEFT", tooltip, "TOPLEFT", 12, -54)
+    balanceCard:SetSize(336, 56)
+    balanceCard:SetBackdropColor(0.08, 0.065, 0.025, 0.92)
+    balanceCard:SetBackdropBorderColor(0.72, 0.49, 0.12, 1)
+
+    local balanceLabel = balanceCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    balanceLabel:SetPoint("TOPLEFT", balanceCard, "TOPLEFT", 12, -9)
+    balanceLabel:SetText("CURRENT GOLD")
+    balanceLabel:SetTextColor(0.75, 0.68, 0.5)
+
+    tooltip.currentValue = balanceCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    tooltip.currentValue:SetPoint("TOPLEFT", balanceLabel, "BOTTOMLEFT", 0, -5)
+
+    local sessionCard = CreateCard(tooltip)
+    sessionCard:SetPoint("TOPLEFT", balanceCard, "BOTTOMLEFT", 0, -8)
+    sessionCard:SetSize(164, 128)
+    AddCardTitle(sessionCard, "This Session")
+    tooltip.sessionEarned = AddMetric(sessionCard, "Earned", -42)
+    tooltip.sessionSpent = AddMetric(sessionCard, "Spent", -66)
+    tooltip.sessionNet = AddMetric(sessionCard, "Net", -90)
+
+    local totalCard = CreateCard(tooltip)
+    totalCard:SetPoint("TOPLEFT", sessionCard, "TOPRIGHT", 8, 0)
+    totalCard:SetSize(164, 128)
+    AddCardTitle(totalCard, "All Time")
+    tooltip.totalEarned = AddMetric(totalCard, "Earned", -42)
+    tooltip.totalSpent = AddMetric(totalCard, "Spent", -66)
+    tooltip.totalNet = AddMetric(totalCard, "Net", -90)
+
+    local accountCard = CreateCard(tooltip)
+    accountCard:SetPoint("TOPLEFT", sessionCard, "BOTTOMLEFT", 0, -8)
+    accountCard:SetSize(336, 94)
+    AddCardTitle(accountCard, "Account Overview")
+    tooltip.accountGold = AddMetric(accountCard, "Current Total", -42)
+    tooltip.accountNet = AddMetric(accountCard, "All-Time Net", -66)
+
+    local footer = tooltip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    footer:SetPoint("BOTTOM", tooltip, "BOTTOM", 0, 11)
+    footer:SetText("|cFFAAAAAALeft-click:|r Open   |cFFAAAAAARight-click:|r Reset character")
+
+    self.minimapTooltip = tooltip
+end
+
+function GoldTracker:UpdateMinimapTooltip()
+    if not self.minimapTooltip or not playerName then return end
+
+    local data = self.db.global.characters[playerName]
+    if not data then return end
+
+    local accountGold = 0
+    local accountNet = 0
+    for _, character in pairs(self.db.global.characters) do
+        accountGold = accountGold + (character.lastGold or 0)
+        accountNet = accountNet + (character.totalEarned or 0) - (character.totalSpent or 0)
+    end
+
+    local tooltip = self.minimapTooltip
+    tooltip.characterName:SetText(playerName)
+    tooltip.currentValue:SetText(self:FormatGold(data.lastGold))
+    tooltip.sessionEarned:SetText(self:FormatGold(data.sessionEarned))
+    tooltip.sessionSpent:SetText(self:FormatGold(data.sessionSpent))
+    tooltip.sessionNet:SetText(self:FormatProfit((data.sessionEarned or 0) - (data.sessionSpent or 0)))
+    tooltip.totalEarned:SetText(self:FormatGold(data.totalEarned))
+    tooltip.totalSpent:SetText(self:FormatGold(data.totalSpent))
+    tooltip.totalNet:SetText(self:FormatProfit((data.totalEarned or 0) - (data.totalSpent or 0)))
+    tooltip.accountGold:SetText(self:FormatGold(accountGold))
+    tooltip.accountNet:SetText(self:FormatProfit(accountNet))
+end
+
+function GoldTracker:ShowMinimapTooltip(anchor)
+    if not anchor then return end
+
+    self:CreateMinimapTooltip()
+    self:UpdateMinimapTooltip()
+
+    local tooltip = self.minimapTooltip
+    local anchorX, anchorY = anchor:GetCenter()
+    if not anchorX or not anchorY then return end
+
+    local screenWidth = UIParent:GetWidth()
+    local screenHeight = UIParent:GetHeight()
+
+    tooltip:ClearAllPoints()
+    if anchorX < screenWidth / 2 then
+        if anchorY < screenHeight / 2 then
+            tooltip:SetPoint("BOTTOMLEFT", anchor, "TOPRIGHT", 8, 8)
+        else
+            tooltip:SetPoint("TOPLEFT", anchor, "BOTTOMRIGHT", 8, -8)
+        end
+    elseif anchorY < screenHeight / 2 then
+        tooltip:SetPoint("BOTTOMRIGHT", anchor, "TOPLEFT", -8, 8)
+    else
+        tooltip:SetPoint("TOPRIGHT", anchor, "BOTTOMLEFT", -8, -8)
+    end
+
+    tooltip:Show()
+end
+
+function GoldTracker:HideMinimapTooltip()
+    if self.minimapTooltip then
+        self.minimapTooltip:Hide()
     end
 end
 
@@ -556,7 +696,9 @@ function GoldTracker:ToggleWindow()
     if self.frame:IsShown() then
         self.frame:Hide()
     else
-        self:UpdateDisplay()
+        self:HideMinimapTooltip()
         self.frame:Show()
+        self.frame:Raise()
+        self:UpdateDisplay()
     end
 end

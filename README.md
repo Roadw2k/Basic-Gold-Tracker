@@ -135,5 +135,5 @@ This addon is released under the MIT License. See LICENSE file for details.
 - `NEW` The tracker window now remembers its position after login or `/reload`.
 - `NEW` Account-wide totals are now included in the minimap tooltip.
 - Redesigned the main tracker window with balance, session, all-time, and account cards.
-- Improved the minimap tooltip with aligned columns, clearer sections, and a cleaner coin icon.
+- Redesigned the minimap hover panel to match the main window with gold-accented cards, clearer sections, and a cleaner coin icon.
 - Added active-character highlighting and alternating rows to the account summary.
