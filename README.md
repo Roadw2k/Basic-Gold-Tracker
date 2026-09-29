@@ -58,6 +58,7 @@ Displays your current gold amount in real-time.
 - **Current Total** - Sum of the last known gold balance for every tracked character
 - **All-Time Net** - Combined earned-minus-spent total across every tracked character
 - **Character List** - Current balance and all-time net for each character, with scrolling for larger rosters
+- **Sortable Columns** - Click `CURRENT` or `NET` to sort characters; click the same heading again to reverse the order
 
 ## How It Works
 
@@ -96,20 +97,22 @@ A: Yes! Data is stored in your WoW SavedVariables folder and persists through ad
 If you encounter any issues or have suggestions:
 
 1. Check that you have the latest version
-2. Ensure all required libraries are installed
-3. Try `/reload` to refresh the addon
-4. Report issues on the GitHub Issues page
+2. Try `/reload` to refresh the addon
+3. Report issues on the GitHub Issues page
 
-## Credits
-
-- Built with [Ace3](https://www.wowace.com/projects/ace3)
-- Uses [LibDBIcon-1.0](https://www.wowace.com/projects/libdbicon-1-0) for minimap functionality
+GoldTracker has no third-party library dependencies; its interface and minimap button use Blizzard's built-in APIs.
 
 ## License
 
 This addon is released under the MIT License. See LICENSE file for details.
 
 ## Changelog
+
+### Version 1.3
+- Removed bundled Ace3, LibDataBroker, and LibDBIcon dependencies while retaining the existing UI
+- Replaced addon lifecycle, events, saved settings, slash commands, and minimap behavior with native Blizzard APIs
+- Added sorting by current gold or all-time net in the Account Overview
+- Preserved migration support for saved data and window position from AceDB-based releases
 
 ### Version 1.0.0
 - Initial release

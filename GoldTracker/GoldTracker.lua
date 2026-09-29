@@ -1,6 +1,7 @@
--- GoldTracker: A simple gold tracking addon for WoW Retail using Ace3
-local GoldTracker = LibStub("AceAddon-3.0"):NewAddon("GoldTracker", "AceConsole-3.0", "AceEvent-3.0")
-local icon = LibStub("LibDBIcon-1.0")
+-- GoldTracker: A lightweight gold tracking addon using only Blizzard APIs
+local addonName, GoldTracker = ...
+GoldTracker = type(GoldTracker) == "table" and GoldTracker or {}
+_G.GoldTracker = GoldTracker
 
 local currentGold = 0
 local lastKnownGold = 0
@@ -25,52 +26,104 @@ local defaults = {
     }
 }
 
--- Data broker object for minimap icon
-local GoldTrackerLDB = LibStub("LibDataBroker-1.1"):NewDataObject("GoldTracker", {
-    type = "data source",
-    text = "GoldTracker",
-    icon = "Interface\\Icons\\INV_Misc_Coin_01",
-    OnClick = function(clickedframe, button)
-        GoldTracker:HideMinimapTooltip()
-
-        if button == "LeftButton" then
-            GoldTracker:ToggleWindow()
-        elseif button == "RightButton" then
-            GoldTracker:ResetStats()
+local function CopyDefaults(target, source)
+    for key, value in pairs(source) do
+        if target[key] == nil then
+            target[key] = type(value) == "table" and {} or value
         end
-    end,
-    OnEnter = function(anchor)
-        GoldTracker:ShowMinimapTooltip(anchor)
-    end,
-    OnLeave = function()
-        GoldTracker:HideMinimapTooltip()
-    end,
-})
-
-function GoldTracker:OnInitialize()
-    -- Set up database
-    self.db = LibStub("AceDB-3.0"):New("GoldTrackerDB", defaults, true)
-    
-    -- Register minimap icon
-    icon:Register("GoldTracker", GoldTrackerLDB, self.db.profile.minimap)
-    
-    -- Register slash commands
-    self:RegisterChatCommand("goldtracker", "SlashCommand")
-    self:RegisterChatCommand("gt", "SlashCommand")
+        if type(value) == "table" then
+            CopyDefaults(target[key], value)
+        end
+    end
 end
 
-function GoldTracker:OnEnable()
-    -- Register events
-    self:RegisterEvent("PLAYER_MONEY", "UpdateGold")
-    self:RegisterEvent("PLAYER_LOGOUT", "OnLogout")
-    
-    -- Create the main window
-    self:CreateWindow()
-    
-    -- Initialize character on a slight delay to ensure player data is ready
-    C_Timer.After(0.5, function()
-        self:InitCharacter()
+function GoldTracker:Print(message)
+    print("|cFFFFD36AGoldTracker:|r " .. tostring(message))
+end
+
+function GoldTracker:InitializeDatabase()
+    GoldTrackerDB = GoldTrackerDB or {}
+
+    -- Preserve data created by older AceDB-based releases.
+    local legacyProfile
+    if GoldTrackerDB.profiles then
+        local profileKey = GoldTrackerDB.profileKeys and GoldTrackerDB.profileKeys[UnitName("player") .. " - " .. GetRealmName()]
+        local _, firstProfile = next(GoldTrackerDB.profiles)
+        legacyProfile = GoldTrackerDB.profiles[profileKey or "Default"] or firstProfile
+    end
+
+    GoldTrackerDB.profile = GoldTrackerDB.profile or legacyProfile or {}
+    GoldTrackerDB.global = GoldTrackerDB.global or {}
+    CopyDefaults(GoldTrackerDB, defaults)
+    self.db = GoldTrackerDB
+end
+
+function GoldTracker:UpdateMinimapButtonPosition()
+    if not self.minimapButton then return end
+    local angle = math.rad(self.db.global.minimapAngle or 225)
+    self.minimapButton:ClearAllPoints()
+    self.minimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * 80, math.sin(angle) * 80)
+end
+
+function GoldTracker:CreateMinimapButton()
+    local button = CreateFrame("Button", "GoldTrackerMinimapButton", Minimap)
+    button:SetSize(32, 32)
+    button:SetFrameStrata("MEDIUM")
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:RegisterForDrag("LeftButton")
+
+    local background = button:CreateTexture(nil, "BACKGROUND")
+    background:SetPoint("CENTER")
+    background:SetSize(22, 22)
+    background:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
+
+    local border = button:CreateTexture(nil, "OVERLAY")
+    border:SetSize(54, 54)
+    border:SetPoint("TOPLEFT")
+    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+
+    local texture = button:CreateTexture(nil, "ARTWORK")
+    texture:SetPoint("CENTER")
+    texture:SetSize(20, 20)
+    texture:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
+    texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+    button:SetScript("OnClick", function(_, mouseButton)
+        GoldTracker:HideMinimapTooltip()
+        if mouseButton == "LeftButton" then
+            GoldTracker:ToggleWindow()
+        else
+            GoldTracker:ResetStats()
+        end
     end)
+    button:SetScript("OnEnter", function(anchor) GoldTracker:ShowMinimapTooltip(anchor) end)
+    button:SetScript("OnLeave", function() GoldTracker:HideMinimapTooltip() end)
+    button:SetScript("OnDragStart", function(self)
+        self:SetScript("OnUpdate", function()
+            local mapX, mapY = Minimap:GetCenter()
+            local cursorX, cursorY = GetCursorPosition()
+            local scale = UIParent:GetEffectiveScale()
+            GoldTracker.db.global.minimapAngle = math.deg(math.atan2(cursorY / scale - mapY, cursorX / scale - mapX))
+            GoldTracker:UpdateMinimapButtonPosition()
+        end)
+    end)
+    button:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
+
+    self.minimapButton = button
+    self:UpdateMinimapButtonPosition()
+end
+
+function GoldTracker:OnInitialize()
+    self:InitializeDatabase()
+    self:CreateMinimapButton()
+
+    SLASH_GOLDTRACKER1 = "/goldtracker"
+    SLASH_GOLDTRACKER2 = "/gt"
+    SlashCmdList.GOLDTRACKER = function(input) GoldTracker:SlashCommand(input) end
+
+    self:CreateWindow()
+    C_Timer.After(0.5, function() self:InitCharacter() end)
 end
 
 function GoldTracker:SlashCommand(input)
@@ -405,8 +458,17 @@ function GoldTracker:UpdateAccountSummary()
         accountNet = accountNet + characterNet
     end
 
+    local sortKey = self.accountSortKey or "name"
+    local sortAscending = self.accountSortAscending ~= false
     table.sort(characters, function(a, b)
-        return a.name < b.name
+        local left, right = a[sortKey], b[sortKey]
+        if left == right then
+            return a.name < b.name
+        end
+        if sortAscending then
+            return left < right
+        end
+        return left > right
     end)
 
     self.frame.accountGold:SetText("Current Total: " .. self:FormatGold(accountGold))
@@ -659,19 +721,39 @@ function GoldTracker:CreateWindow()
     characterHeader:SetText("CHARACTER")
     characterHeader:SetTextColor(0.65, 0.65, 0.65)
 
-    local goldHeader = accountCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    goldHeader:SetPoint("LEFT", characterHeader, "LEFT", 134, 0)
-    goldHeader:SetWidth(110)
-    goldHeader:SetJustifyH("RIGHT")
-    goldHeader:SetText("CURRENT")
-    goldHeader:SetTextColor(0.65, 0.65, 0.65)
+    local function CreateSortHeader(parent, anchor, x, width, label, sortKey)
+        local button = CreateFrame("Button", nil, parent)
+        button:SetPoint("LEFT", anchor, "LEFT", x, 0)
+        button:SetSize(width, 20)
 
-    local netHeader = accountCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    netHeader:SetPoint("LEFT", characterHeader, "LEFT", 244, 0)
-    netHeader:SetWidth(115)
-    netHeader:SetJustifyH("RIGHT")
-    netHeader:SetText("NET")
-    netHeader:SetTextColor(0.65, 0.65, 0.65)
+        button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        button.label:SetAllPoints()
+        button.label:SetJustifyH("RIGHT")
+        button.label:SetText(label)
+        button.label:SetTextColor(0.65, 0.65, 0.65)
+
+        button:SetScript("OnEnter", function(self) self.label:SetTextColor(1, 0.83, 0.35) end)
+        button:SetScript("OnLeave", function(self)
+            if GoldTracker.accountSortKey ~= sortKey then
+                self.label:SetTextColor(0.65, 0.65, 0.65)
+            end
+        end)
+        button:SetScript("OnClick", function()
+            if GoldTracker.accountSortKey == sortKey then
+                GoldTracker.accountSortAscending = not GoldTracker.accountSortAscending
+            else
+                GoldTracker.accountSortKey = sortKey
+                GoldTracker.accountSortAscending = false
+            end
+            GoldTracker:UpdateSortHeaders()
+            GoldTracker:UpdateAccountSummary()
+        end)
+        return button
+    end
+
+    frame.goldHeader = CreateSortHeader(accountCard, characterHeader, 134, 110, "CURRENT", "gold")
+    frame.netHeader = CreateSortHeader(accountCard, characterHeader, 244, 115, "NET", "net")
+    frame.characterHeader = characterHeader
 
     local accountScroll = CreateFrame("ScrollFrame", nil, accountCard, "UIPanelScrollFrameTemplate")
     accountScroll:SetPoint("TOPLEFT", characterHeader, "BOTTOMLEFT", -6, -7)
@@ -684,6 +766,17 @@ function GoldTracker:CreateWindow()
     frame.accountScrollChild = accountScrollChild
     frame.accountRows = {}
     self.frame = frame
+    self:UpdateSortHeaders()
+end
+
+function GoldTracker:UpdateSortHeaders()
+    if not self.frame then return end
+
+    local arrow = self.accountSortAscending and " ▲" or " ▼"
+    self.frame.goldHeader.label:SetText("CURRENT" .. (self.accountSortKey == "gold" and arrow or ""))
+    self.frame.netHeader.label:SetText("NET" .. (self.accountSortKey == "net" and arrow or ""))
+    self.frame.goldHeader.label:SetTextColor(self.accountSortKey == "gold" and 1 or 0.65, self.accountSortKey == "gold" and 0.83 or 0.65, self.accountSortKey == "gold" and 0.35 or 0.65)
+    self.frame.netHeader.label:SetTextColor(self.accountSortKey == "net" and 1 or 0.65, self.accountSortKey == "net" and 0.83 or 0.65, self.accountSortKey == "net" and 0.35 or 0.65)
 end
 
 -- Toggle window
@@ -702,3 +795,19 @@ function GoldTracker:ToggleWindow()
         self:UpdateDisplay()
     end
 end
+
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("PLAYER_MONEY")
+eventFrame:RegisterEvent("PLAYER_LOGOUT")
+eventFrame:SetScript("OnEvent", function(_, event, loadedAddon)
+    if event == "ADDON_LOADED" then
+        if loadedAddon ~= addonName then return end
+        eventFrame:UnregisterEvent("ADDON_LOADED")
+        GoldTracker:OnInitialize()
+    elseif event == "PLAYER_MONEY" then
+        GoldTracker:UpdateGold()
+    elseif event == "PLAYER_LOGOUT" then
+        GoldTracker:OnLogout()
+    end
+end)
