@@ -58,7 +58,17 @@ Displays your current gold amount in real-time.
 - **Current Total** - Sum of the last known gold balance for every tracked character
 - **All-Time Net** - Combined earned-minus-spent total across every tracked character
 - **Character List** - Current balance and all-time net for each character, with scrolling for larger rosters
-- **Sortable Columns** - Click `CURRENT` or `NET` to sort characters; click the same heading again to reverse the order
+- **Sortable Columns** - Click `CHARACTER`, `CURRENT`, or `NET` to sort the list; click the same heading again to reverse the order
+
+### Account Trends
+- **Daily History** - Records earned, spent, and net gold in daily buckets
+- **Period Summaries** - Compare today's activity with the last 7 and 30 days
+- **Daily Average and Best Day** - Quickly see longer-term performance
+- **7-Day Net Chart** - View positive and negative daily movement at a glance
+- **Detailed Tooltips** - Hover over a chart bar for that day's exact earned, spent, and net values
+- **Automatic Retention** - Keeps a rolling 90 days of compact history
+
+Historical trends begin accumulating after installing this release; previous cumulative totals cannot be assigned to past dates.
 
 ## How It Works
 
@@ -72,7 +82,7 @@ The addon tracks your gold balance continuously and updates statistics whenever 
 
 ## Screenshots
 
-![GoldTracker Window](BasicGoldTracker-main.png)
+![GoldTracker Window](BasicGoldTracker.png)
 ![MiniMap Window](BasicGoldTracker-minimap.png)
 
 ## FAQ
@@ -107,6 +117,13 @@ GoldTracker has no third-party library dependencies; its interface and minimap b
 This addon is released under the MIT License. See LICENSE file for details.
 
 ## Changelog
+
+### Version 1.4
+- Added account-wide daily trend history with 90-day retention
+- Added Today, 7-day, and 30-day earned, spent, and net summaries
+- Added 30-day daily average and best-day statistics
+- Added a native seven-day net chart with detailed hover tooltips
+- Added Summary and Trends views to the Account Overview card
 
 ### Version 1.3
 - Removed bundled Ace3, LibDataBroker, and LibDBIcon dependencies while retaining the existing UI

@@ -41,6 +41,43 @@ function GoldTracker:Print(message)
     print("|cFFFFD36AGoldTracker:|r " .. tostring(message))
 end
 
+local function GetDayKey(timestamp)
+    return date("%Y-%m-%d", timestamp or time())
+end
+
+function GoldTracker:PruneHistory(data)
+    if not data.history then return end
+    local cutoff = GetDayKey(time() - (89 * 86400))
+    for dayKey in pairs(data.history) do
+        if dayKey < cutoff then
+            data.history[dayKey] = nil
+        end
+    end
+end
+
+function GoldTracker:RecordDailyChange(data, diff, openingGold, closingGold)
+    data.history = data.history or {}
+    local dayKey = GetDayKey()
+    local day = data.history[dayKey]
+    if not day then
+        day = {
+            earned = 0,
+            spent = 0,
+            openingGold = openingGold or closingGold or 0,
+            closingGold = closingGold or openingGold or 0,
+        }
+        data.history[dayKey] = day
+    end
+
+    if diff > 0 then
+        day.earned = (day.earned or 0) + diff
+    elseif diff < 0 then
+        day.spent = (day.spent or 0) + math.abs(diff)
+    end
+    day.closingGold = closingGold or day.closingGold
+    self:PruneHistory(data)
+end
+
 function GoldTracker:InitializeDatabase()
     GoldTrackerDB = GoldTrackerDB or {}
 
@@ -353,10 +390,13 @@ function GoldTracker:InitCharacter()
             sessionEarned = 0,
             sessionSpent = 0,
             lastGold = 0,
-            firstLogin = true
+            firstLogin = true,
+            history = {},
         }
     end
     
+    local data = self.db.global.characters[playerName]
+    data.history = data.history or {}
     currentGold = GetMoney()
     
     -- On first login, just set the baseline without tracking
@@ -364,6 +404,7 @@ function GoldTracker:InitCharacter()
         self.db.global.characters[playerName].lastGold = currentGold
         self.db.global.characters[playerName].firstLogin = false
         lastKnownGold = currentGold
+        self:RecordDailyChange(data, 0, currentGold, currentGold)
     else
         -- On subsequent logins, use the saved last gold value
         lastKnownGold = self.db.global.characters[playerName].lastGold or currentGold
@@ -375,6 +416,7 @@ function GoldTracker:InitCharacter()
         elseif diff < 0 then
             self.db.global.characters[playerName].totalSpent = self.db.global.characters[playerName].totalSpent + math.abs(diff)
         end
+        self:RecordDailyChange(data, diff, lastKnownGold, currentGold)
         
         -- Update lastKnownGold to current
         lastKnownGold = currentGold
@@ -408,6 +450,7 @@ function GoldTracker:UpdateGold()
         data.totalSpent = data.totalSpent + spent
         data.sessionSpent = data.sessionSpent + spent
     end
+    self:RecordDailyChange(data, diff, lastKnownGold, currentGold)
     
     lastKnownGold = currentGold
     data.lastGold = currentGold
@@ -524,6 +567,82 @@ function GoldTracker:UpdateAccountSummary()
     end
 
     self.frame.accountScrollChild:SetHeight(math.max(#characters * 24, 1))
+    self:UpdateTrendDisplay()
+end
+
+function GoldTracker:GetAccountTrend(days)
+    local totals = { earned = 0, spent = 0, daily = {} }
+    for offset = days - 1, 0, -1 do
+        local timestamp = time() - (offset * 86400)
+        local dayKey = GetDayKey(timestamp)
+        local dayTotal = { key = dayKey, timestamp = timestamp, earned = 0, spent = 0 }
+        for _, character in pairs(self.db.global.characters) do
+            local history = character.history
+            local entry = history and history[dayKey]
+            if entry then
+                dayTotal.earned = dayTotal.earned + (entry.earned or 0)
+                dayTotal.spent = dayTotal.spent + (entry.spent or 0)
+            end
+        end
+        dayTotal.net = dayTotal.earned - dayTotal.spent
+        totals.earned = totals.earned + dayTotal.earned
+        totals.spent = totals.spent + dayTotal.spent
+        table.insert(totals.daily, dayTotal)
+    end
+    totals.net = totals.earned - totals.spent
+    return totals
+end
+
+function GoldTracker:UpdateTrendDisplay()
+    if not self.frame or not self.frame.trendRows then return end
+
+    local periods = {
+        self:GetAccountTrend(1),
+        self:GetAccountTrend(7),
+        self:GetAccountTrend(30),
+    }
+    for index, totals in ipairs(periods) do
+        local row = self.frame.trendRows[index]
+        row.earned:SetText(self:FormatGold(totals.earned))
+        row.spent:SetText(self:FormatGold(totals.spent))
+        row.net:SetText(self:FormatProfit(totals.net))
+    end
+
+    local thirtyDays = periods[3]
+    local bestNet
+    local bestDay
+    for _, day in ipairs(thirtyDays.daily) do
+        if bestNet == nil or day.net > bestNet then
+            bestNet = day.net
+            bestDay = day.timestamp
+        end
+    end
+    local average = math.floor(math.abs(thirtyDays.net) / 30)
+    if thirtyDays.net < 0 then average = -average end
+    self.frame.trendAverage:SetText("30-day daily average: " .. self:FormatProfit(average))
+    self.frame.trendBest:SetText("Best day: " .. date("%b %d", bestDay or time()) .. "  " .. self:FormatProfit(bestNet or 0))
+
+    local sevenDays = periods[2]
+    local maximum = 1
+    for _, day in ipairs(sevenDays.daily) do
+        maximum = math.max(maximum, math.abs(day.net))
+    end
+
+    for index, day in ipairs(sevenDays.daily) do
+        local bar = self.frame.trendBars[index]
+        local height = math.max(1, (math.abs(day.net) / maximum) * 42)
+        bar.fill:ClearAllPoints()
+        bar.fill:SetHeight(height)
+        if day.net >= 0 then
+            bar.fill:SetPoint("BOTTOM", bar, "CENTER", 0, 0)
+            bar.fill:SetColorTexture(0.15, 0.75, 0.28, 0.85)
+        else
+            bar.fill:SetPoint("TOP", bar, "CENTER", 0, 0)
+            bar.fill:SetColorTexture(0.9, 0.2, 0.18, 0.85)
+        end
+        bar.day = day
+        bar.label:SetText(date("%a", day.timestamp):sub(1, 1))
+    end
 end
 
 -- Reset stats
@@ -535,7 +654,8 @@ function GoldTracker:ResetStats()
             sessionEarned = 0,
             sessionSpent = 0,
             lastGold = currentGold,
-            firstLogin = false
+            firstLogin = false,
+            history = {},
         }
         self:UpdateDisplay()
         self:Print("Stats reset!")
@@ -608,7 +728,12 @@ function GoldTracker:CreateWindow()
     )
     frame:SetMovable(true)
     frame:SetClampedToScreen(true)
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetFrameLevel(100)
+    frame:SetToplevel(true)
     frame:EnableMouse(true)
+    frame:SetScript("OnShow", function(self) self:Raise() end)
+    frame:SetScript("OnMouseDown", function(self) self:Raise() end)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(self)
         self:StartMoving()
@@ -702,6 +827,23 @@ function GoldTracker:CreateWindow()
     accountCard:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -8, 10)
     local accountTitle = AddCardTitle(accountCard, "Account Overview")
 
+    local function CreateViewButton(label, x)
+        local button = CreateFrame("Button", nil, accountCard)
+        button:SetPoint("TOPRIGHT", accountCard, "TOPRIGHT", x, -8)
+        button:SetSize(66, 24)
+        button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        button.label:SetAllPoints()
+        button.label:SetText(label)
+        button:SetScript("OnEnter", function(self) self.label:SetTextColor(1, 0.83, 0.35) end)
+        button:SetScript("OnLeave", function() GoldTracker:UpdateAccountViewButtons() end)
+        return button
+    end
+
+    frame.summaryViewButton = CreateViewButton("SUMMARY", -78)
+    frame.trendsViewButton = CreateViewButton("TRENDS", -10)
+    frame.summaryViewButton:SetScript("OnClick", function() GoldTracker:ShowAccountView("summary") end)
+    frame.trendsViewButton:SetScript("OnClick", function() GoldTracker:ShowAccountView("trends") end)
+
     frame.accountGold = accountCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     frame.accountGold:SetPoint("TOPLEFT", accountTitle, "BOTTOMLEFT", 0, -14)
 
@@ -714,21 +856,14 @@ function GoldTracker:CreateWindow()
     accountSeparator:SetHeight(1)
     accountSeparator:SetColorTexture(0.45, 0.34, 0.12, 0.65)
 
-    local characterHeader = accountCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    characterHeader:SetPoint("TOPLEFT", accountSeparator, "BOTTOMLEFT", 6, -9)
-    characterHeader:SetWidth(134)
-    characterHeader:SetJustifyH("LEFT")
-    characterHeader:SetText("CHARACTER")
-    characterHeader:SetTextColor(0.65, 0.65, 0.65)
-
-    local function CreateSortHeader(parent, anchor, x, width, label, sortKey)
-        local button = CreateFrame("Button", nil, parent)
-        button:SetPoint("LEFT", anchor, "LEFT", x, 0)
+    local function CreateSortHeader(x, width, label, sortKey, justify)
+        local button = CreateFrame("Button", nil, accountCard)
+        button:SetPoint("TOPLEFT", accountSeparator, "BOTTOMLEFT", 6 + x, -9)
         button:SetSize(width, 20)
 
         button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         button.label:SetAllPoints()
-        button.label:SetJustifyH("RIGHT")
+        button.label:SetJustifyH(justify)
         button.label:SetText(label)
         button.label:SetTextColor(0.65, 0.65, 0.65)
 
@@ -743,7 +878,7 @@ function GoldTracker:CreateWindow()
                 GoldTracker.accountSortAscending = not GoldTracker.accountSortAscending
             else
                 GoldTracker.accountSortKey = sortKey
-                GoldTracker.accountSortAscending = false
+                GoldTracker.accountSortAscending = sortKey == "name"
             end
             GoldTracker:UpdateSortHeaders()
             GoldTracker:UpdateAccountSummary()
@@ -751,9 +886,10 @@ function GoldTracker:CreateWindow()
         return button
     end
 
-    frame.goldHeader = CreateSortHeader(accountCard, characterHeader, 134, 110, "CURRENT", "gold")
-    frame.netHeader = CreateSortHeader(accountCard, characterHeader, 244, 115, "NET", "net")
-    frame.characterHeader = characterHeader
+    frame.characterHeader = CreateSortHeader(0, 134, "CHARACTER", "name", "LEFT")
+    frame.goldHeader = CreateSortHeader(134, 110, "CURRENT", "gold", "RIGHT")
+    frame.netHeader = CreateSortHeader(244, 115, "NET", "net", "RIGHT")
+    local characterHeader = frame.characterHeader
 
     local accountScroll = CreateFrame("ScrollFrame", nil, accountCard, "UIPanelScrollFrameTemplate")
     accountScroll:SetPoint("TOPLEFT", characterHeader, "BOTTOMLEFT", -6, -7)
@@ -763,20 +899,155 @@ function GoldTracker:CreateWindow()
     accountScrollChild:SetSize(365, 1)
     accountScroll:SetScrollChild(accountScrollChild)
 
+    local trendFrame = CreateFrame("Frame", nil, accountCard)
+    trendFrame:SetPoint("TOPLEFT", accountCard, "TOPLEFT", 14, -46)
+    trendFrame:SetPoint("BOTTOMRIGHT", accountCard, "BOTTOMRIGHT", -14, 10)
+    trendFrame:Hide()
+
+    local headers = { "PERIOD", "EARNED", "SPENT", "NET" }
+    local headerX = { 0, 68, 164, 260 }
+    local headerWidths = { 66, 94, 94, 105 }
+    for index, label in ipairs(headers) do
+        local header = trendFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        header:SetPoint("TOPLEFT", trendFrame, "TOPLEFT", headerX[index], 0)
+        header:SetWidth(headerWidths[index])
+        header:SetJustifyH(index == 1 and "LEFT" or "RIGHT")
+        header:SetText(label)
+        header:SetTextColor(0.65, 0.65, 0.65)
+    end
+
+    frame.trendRows = {}
+    local periodLabels = { "Today", "7 Days", "30 Days" }
+    for index, periodLabel in ipairs(periodLabels) do
+        local row = CreateFrame("Frame", nil, trendFrame)
+        row:SetPoint("TOPLEFT", trendFrame, "TOPLEFT", 0, -(15 + ((index - 1) * 22)))
+        row:SetSize(369, 20)
+
+        row.period = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.period:SetPoint("LEFT")
+        row.period:SetWidth(66)
+        row.period:SetJustifyH("LEFT")
+        row.period:SetText(periodLabel)
+
+        local function AddTrendValue(x, width)
+            local value = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            value:SetPoint("LEFT", row, "LEFT", x, 0)
+            value:SetWidth(width)
+            value:SetJustifyH("RIGHT")
+            return value
+        end
+        row.earned = AddTrendValue(68, 94)
+        row.spent = AddTrendValue(164, 94)
+        row.net = AddTrendValue(260, 105)
+        frame.trendRows[index] = row
+    end
+
+    local trendSeparator = trendFrame:CreateTexture(nil, "ARTWORK")
+    trendSeparator:SetPoint("TOPLEFT", trendFrame, "TOPLEFT", 0, -82)
+    trendSeparator:SetPoint("RIGHT", trendFrame, "RIGHT", 0, 0)
+    trendSeparator:SetHeight(1)
+    trendSeparator:SetColorTexture(0.45, 0.34, 0.12, 0.65)
+
+    frame.trendAverage = trendFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.trendAverage:SetPoint("TOPLEFT", trendSeparator, "BOTTOMLEFT", 0, -7)
+    frame.trendBest = trendFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.trendBest:SetPoint("TOPRIGHT", trendSeparator, "BOTTOMRIGHT", 0, -7)
+
+    local chartTitle = trendFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    chartTitle:SetPoint("TOPLEFT", trendSeparator, "BOTTOMLEFT", 0, -28)
+    chartTitle:SetText("7-DAY NET")
+    chartTitle:SetTextColor(0.75, 0.68, 0.5)
+
+    local chart = CreateFrame("Frame", nil, trendFrame)
+    chart:SetPoint("TOPLEFT", chartTitle, "BOTTOMLEFT", 0, -5)
+    chart:SetPoint("BOTTOMRIGHT", trendFrame, "BOTTOMRIGHT", 0, 12)
+
+    local zeroLine = chart:CreateTexture(nil, "ARTWORK")
+    zeroLine:SetPoint("LEFT", chart, "LEFT", 0, -2)
+    zeroLine:SetPoint("RIGHT", chart, "RIGHT", 0, -2)
+    zeroLine:SetHeight(1)
+    zeroLine:SetColorTexture(0.5, 0.5, 0.5, 0.45)
+
+    frame.trendBars = {}
+    for index = 1, 7 do
+        local bar = CreateFrame("Frame", nil, chart)
+        bar:SetSize(42, 94)
+        bar:SetPoint("BOTTOMLEFT", chart, "BOTTOMLEFT", 13 + ((index - 1) * 50), 0)
+        bar:EnableMouse(true)
+
+        bar.fill = bar:CreateTexture(nil, "ARTWORK")
+        bar.fill:SetWidth(25)
+
+        bar.label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        bar.label:SetPoint("TOP", bar, "BOTTOM", 0, 7)
+        bar.label:SetTextColor(0.65, 0.65, 0.65)
+
+        bar:SetScript("OnEnter", function(self)
+            if not self.day then return end
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(date("%A, %b %d", self.day.timestamp), 1, 0.83, 0.35)
+            GameTooltip:AddDoubleLine("Earned", GoldTracker:FormatGold(self.day.earned), 0.8, 0.8, 0.8, 1, 1, 1)
+            GameTooltip:AddDoubleLine("Spent", GoldTracker:FormatGold(self.day.spent), 0.8, 0.8, 0.8, 1, 1, 1)
+            GameTooltip:AddDoubleLine("Net", GoldTracker:FormatProfit(self.day.net), 0.8, 0.8, 0.8, 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        bar:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        frame.trendBars[index] = bar
+    end
+
     frame.accountScrollChild = accountScrollChild
     frame.accountRows = {}
+    frame.accountTrendFrame = trendFrame
+    frame.accountSummaryWidgets = {
+        frame.accountGold, frame.accountNet, accountSeparator, characterHeader,
+        frame.goldHeader, frame.netHeader, accountScroll,
+    }
     self.frame = frame
+    self.accountView = "summary"
+    self.accountSortKey = self.accountSortKey or "name"
+    if self.accountSortAscending == nil then self.accountSortAscending = true end
     self:UpdateSortHeaders()
+    self:ShowAccountView("summary")
 end
 
 function GoldTracker:UpdateSortHeaders()
     if not self.frame then return end
 
-    local arrow = self.accountSortAscending and " ▲" or " ▼"
-    self.frame.goldHeader.label:SetText("CURRENT" .. (self.accountSortKey == "gold" and arrow or ""))
-    self.frame.netHeader.label:SetText("NET" .. (self.accountSortKey == "net" and arrow or ""))
-    self.frame.goldHeader.label:SetTextColor(self.accountSortKey == "gold" and 1 or 0.65, self.accountSortKey == "gold" and 0.83 or 0.65, self.accountSortKey == "gold" and 0.35 or 0.65)
-    self.frame.netHeader.label:SetTextColor(self.accountSortKey == "net" and 1 or 0.65, self.accountSortKey == "net" and 0.83 or 0.65, self.accountSortKey == "net" and 0.35 or 0.65)
+    -- ASCII carets render reliably in every supported WoW client font.
+    local arrow = self.accountSortAscending and " ^" or " v"
+    local headers = {
+        { button = self.frame.characterHeader, key = "name", label = "CHARACTER" },
+        { button = self.frame.goldHeader, key = "gold", label = "CURRENT" },
+        { button = self.frame.netHeader, key = "net", label = "NET" },
+    }
+    for _, header in ipairs(headers) do
+        local active = self.accountSortKey == header.key
+        header.button.label:SetText(header.label .. (active and arrow or ""))
+        header.button.label:SetTextColor(active and 1 or 0.65, active and 0.83 or 0.65, active and 0.35 or 0.65)
+    end
+end
+
+function GoldTracker:UpdateAccountViewButtons()
+    if not self.frame then return end
+    local summaryActive = self.accountView == "summary"
+    self.frame.summaryViewButton.label:SetTextColor(summaryActive and 1 or 0.55, summaryActive and 0.83 or 0.55, summaryActive and 0.35 or 0.55)
+    self.frame.trendsViewButton.label:SetTextColor(not summaryActive and 1 or 0.55, not summaryActive and 0.83 or 0.55, not summaryActive and 0.35 or 0.55)
+end
+
+function GoldTracker:ShowAccountView(view)
+    if not self.frame then return end
+    self.accountView = view == "trends" and "trends" or "summary"
+    local showSummary = self.accountView == "summary"
+    for _, widget in ipairs(self.frame.accountSummaryWidgets) do
+        if showSummary then widget:Show() else widget:Hide() end
+    end
+    if showSummary then
+        self.frame.accountTrendFrame:Hide()
+    else
+        self.frame.accountTrendFrame:Show()
+        self:UpdateTrendDisplay()
+    end
+    self:UpdateAccountViewButtons()
 end
 
 -- Toggle window
