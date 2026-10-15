@@ -23,6 +23,8 @@ local defaults = {
     global = {
         characters = {},
         minimapAngle = 225,
+        savingsGoal = 0,
+        savingsGoalNotified = 0,
     }
 }
 
@@ -43,6 +45,16 @@ end
 
 local function GetDayKey(timestamp)
     return date("%Y-%m-%d", timestamp or time())
+end
+
+local function FormatWholeGold(copper)
+    local value = tostring(math.floor((copper or 0) / 10000))
+    while true do
+        local formatted, replacements = value:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+        value = formatted
+        if replacements == 0 then break end
+    end
+    return value .. "g"
 end
 
 function GoldTracker:PruneHistory(data)
@@ -211,7 +223,7 @@ function GoldTracker:CreateMinimapTooltip()
     if self.minimapTooltip then return end
 
     local tooltip = CreateFrame("Frame", "GoldTrackerMinimapTooltip", UIParent, "BackdropTemplate")
-    tooltip:SetSize(360, 400)
+    tooltip:SetSize(360, 500)
     tooltip:SetFrameStrata("TOOLTIP")
     tooltip:SetClampedToScreen(true)
     tooltip:SetBackdrop({
@@ -311,6 +323,30 @@ function GoldTracker:CreateMinimapTooltip()
     tooltip.accountGold = AddMetric(accountCard, "Current Total", -42)
     tooltip.accountNet = AddMetric(accountCard, "All-Time Net", -66)
 
+    local goalCard = CreateCard(tooltip)
+    goalCard:SetPoint("TOPLEFT", accountCard, "BOTTOMLEFT", 0, -8)
+    goalCard:SetSize(336, 104)
+    AddCardTitle(goalCard, "Savings Goal")
+
+    tooltip.goalAmount = goalCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    tooltip.goalAmount:SetPoint("TOPLEFT", goalCard, "TOPLEFT", 10, -39)
+    tooltip.goalPercent = goalCard:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    tooltip.goalPercent:SetPoint("TOPRIGHT", goalCard, "TOPRIGHT", -10, -39)
+    tooltip.goalPercent:SetTextColor(0.95, 0.68, 0.12)
+
+    tooltip.goalProgress = CreateFrame("StatusBar", nil, goalCard, "BackdropTemplate")
+    tooltip.goalProgress:SetPoint("TOPLEFT", goalCard, "TOPLEFT", 10, -58)
+    tooltip.goalProgress:SetPoint("RIGHT", goalCard, "RIGHT", -10, 0)
+    tooltip.goalProgress:SetHeight(8)
+    tooltip.goalProgress:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    tooltip.goalProgress:SetStatusBarColor(0.85, 0.63, 0.16, 1)
+    tooltip.goalProgress:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+    tooltip.goalProgress:SetBackdropColor(0.12, 0.12, 0.14, 0.9)
+
+    tooltip.goalRemaining = goalCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    tooltip.goalRemaining:SetPoint("TOPLEFT", tooltip.goalProgress, "BOTTOMLEFT", 0, -7)
+    tooltip.goalRemaining:SetTextColor(0.7, 0.7, 0.7)
+
     local footer = tooltip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     footer:SetPoint("BOTTOM", tooltip, "BOTTOM", 0, 11)
     footer:SetText("|cFFAAAAAALeft-click:|r Open   |cFFAAAAAARight-click:|r Reset character")
@@ -342,6 +378,29 @@ function GoldTracker:UpdateMinimapTooltip()
     tooltip.totalNet:SetText(self:FormatProfit((data.totalEarned or 0) - (data.totalSpent or 0)))
     tooltip.accountGold:SetText(self:FormatGold(accountGold))
     tooltip.accountNet:SetText(self:FormatProfit(accountNet))
+
+    local goal = self.db.global.savingsGoal or 0
+    tooltip.goalProgress:SetMinMaxValues(0, 1)
+    if goal > 0 then
+        local progress = accountGold / goal
+        local percent = math.floor((progress * 100) + 0.5)
+        tooltip.goalAmount:SetText("Goal: " .. FormatWholeGold(goal))
+        tooltip.goalPercent:SetText(percent .. "%")
+        tooltip.goalProgress:SetValue(math.min(progress, 1))
+        if accountGold >= goal then
+            tooltip.goalRemaining:SetText("Goal reached! " .. FormatWholeGold(accountGold - goal) .. " above target")
+            tooltip.goalRemaining:SetTextColor(0.35, 0.9, 0.4)
+        else
+            tooltip.goalRemaining:SetText(FormatWholeGold(goal - accountGold) .. " remaining")
+            tooltip.goalRemaining:SetTextColor(0.7, 0.7, 0.7)
+        end
+    else
+        tooltip.goalAmount:SetText("No goal set")
+        tooltip.goalPercent:SetText("")
+        tooltip.goalProgress:SetValue(0)
+        tooltip.goalRemaining:SetText("Open the tracker and select GOAL to set one.")
+        tooltip.goalRemaining:SetTextColor(0.7, 0.7, 0.7)
+    end
 end
 
 function GoldTracker:ShowMinimapTooltip(anchor)
@@ -428,6 +487,7 @@ function GoldTracker:InitCharacter()
     self.db.global.characters[playerName].sessionSpent = 0
     
     self:Print("Type /goldtracker or /gt to open, or click the minimap button.")
+    self:UpdateSavingsGoal()
 end
 
 -- Update gold tracking
@@ -456,6 +516,9 @@ function GoldTracker:UpdateGold()
     data.lastGold = currentGold
     
     self:UpdateDisplay()
+    if self.minimapTooltip and self.minimapTooltip:IsShown() then
+        self:UpdateMinimapTooltip()
+    end
 end
 
 -- Update display
@@ -516,6 +579,7 @@ function GoldTracker:UpdateAccountSummary()
 
     self.frame.accountGold:SetText("Current Total: " .. self:FormatGold(accountGold))
     self.frame.accountNet:SetText("All-Time Net: " .. self:FormatProfit(accountNet))
+    self:UpdateSavingsGoal(accountGold)
 
     for _, row in ipairs(self.frame.accountRows) do
         row:Hide()
@@ -591,6 +655,83 @@ function GoldTracker:GetAccountTrend(days)
     end
     totals.net = totals.earned - totals.spent
     return totals
+end
+
+function GoldTracker:SetSavingsGoal(input)
+    local normalized = tostring(input or ""):gsub("[,%s]", ""):gsub("[gG]$", "")
+    local gold = tonumber(normalized)
+    if not gold or gold <= 0 then
+        if self.frame and self.frame.goalFeedback then
+            self.frame.goalFeedback:SetText("Enter a gold amount greater than zero.")
+            self.frame.goalFeedback:SetTextColor(1, 0.3, 0.25)
+        end
+        return
+    end
+
+    self.db.global.savingsGoal = math.floor(gold * 10000)
+    self.db.global.savingsGoalNotified = 0
+    if self.frame and self.frame.goalInput then
+        self.frame.goalInput:SetText("")
+        self.frame.goalInput:ClearFocus()
+    end
+    self:UpdateSavingsGoal()
+    if self.minimapTooltip then self:UpdateMinimapTooltip() end
+end
+
+function GoldTracker:ClearSavingsGoal()
+    self.db.global.savingsGoal = 0
+    self.db.global.savingsGoalNotified = 0
+    if self.frame and self.frame.goalInput then
+        self.frame.goalInput:SetText("")
+        self.frame.goalInput:ClearFocus()
+    end
+    self:UpdateSavingsGoal()
+    if self.minimapTooltip then self:UpdateMinimapTooltip() end
+end
+
+function GoldTracker:UpdateSavingsGoal(accountGold)
+    if not self.frame or not self.frame.goalProgress then return end
+
+    if accountGold == nil then
+        accountGold = 0
+        for _, character in pairs(self.db.global.characters) do
+            accountGold = accountGold + (character.lastGold or 0)
+        end
+    end
+
+    local goal = self.db.global.savingsGoal or 0
+    if goal <= 0 then
+        self.frame.goalTitle:SetText("No savings goal set")
+        self.frame.goalPercent:SetText("")
+        self.frame.goalRemaining:SetText("Enter a target below to start tracking your progress.")
+        self.frame.goalProgress:SetMinMaxValues(0, 1)
+        self.frame.goalProgress:SetValue(0)
+        self.frame.goalFeedback:SetText("")
+        self.frame.goalClearButton:Disable()
+        return
+    end
+
+    local progress = accountGold / goal
+    local displayProgress = math.min(progress, 1)
+    local percent = math.floor((progress * 100) + 0.5)
+    if accountGold >= goal and self.db.global.savingsGoalNotified ~= goal then
+        self.db.global.savingsGoalNotified = goal
+        self:Print("|cFFFFD700*** SAVINGS GOAL REACHED! ***|r You did it! Your account has reached |cFFFFD36A" .. FormatWholeGold(accountGold) .. "|r and conquered your |cFFFFD36A" .. FormatWholeGold(goal) .. "|r goal. Amazing work!")
+    end
+    self.frame.goalTitle:SetText("Goal: " .. FormatWholeGold(goal))
+    self.frame.goalPercent:SetText(percent .. "%")
+    self.frame.goalProgress:SetMinMaxValues(0, 1)
+    self.frame.goalProgress:SetValue(displayProgress)
+    if accountGold >= goal then
+        self.frame.goalRemaining:SetText("Goal reached! " .. FormatWholeGold(accountGold - goal) .. " above target")
+        self.frame.goalRemaining:SetTextColor(0.35, 0.9, 0.4)
+    else
+        self.frame.goalRemaining:SetText(FormatWholeGold(goal - accountGold) .. " remaining")
+        self.frame.goalRemaining:SetTextColor(0.7, 0.7, 0.7)
+    end
+    self.frame.goalFeedback:SetText("Current account balance: " .. FormatWholeGold(accountGold))
+    self.frame.goalFeedback:SetTextColor(0.7, 0.7, 0.7)
+    self.frame.goalClearButton:Enable()
 end
 
 function GoldTracker:UpdateTrendDisplay()
@@ -839,10 +980,12 @@ function GoldTracker:CreateWindow()
         return button
     end
 
-    frame.summaryViewButton = CreateViewButton("SUMMARY", -78)
-    frame.trendsViewButton = CreateViewButton("TRENDS", -10)
+    frame.summaryViewButton = CreateViewButton("SUMMARY", -146)
+    frame.trendsViewButton = CreateViewButton("TRENDS", -78)
+    frame.goalViewButton = CreateViewButton("GOAL", -10)
     frame.summaryViewButton:SetScript("OnClick", function() GoldTracker:ShowAccountView("summary") end)
     frame.trendsViewButton:SetScript("OnClick", function() GoldTracker:ShowAccountView("trends") end)
+    frame.goalViewButton:SetScript("OnClick", function() GoldTracker:ShowAccountView("goal") end)
 
     frame.accountGold = accountCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     frame.accountGold:SetPoint("TOPLEFT", accountTitle, "BOTTOMLEFT", 0, -14)
@@ -995,9 +1138,68 @@ function GoldTracker:CreateWindow()
         frame.trendBars[index] = bar
     end
 
+    local goalFrame = CreateFrame("Frame", nil, accountCard)
+    goalFrame:SetPoint("TOPLEFT", accountCard, "TOPLEFT", 14, -52)
+    goalFrame:SetPoint("BOTTOMRIGHT", accountCard, "BOTTOMRIGHT", -14, 14)
+    goalFrame:Hide()
+
+    frame.goalTitle = goalFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.goalTitle:SetPoint("TOPLEFT", goalFrame, "TOPLEFT", 0, 0)
+    frame.goalPercent = goalFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.goalPercent:SetPoint("TOPRIGHT", goalFrame, "TOPRIGHT", 0, 0)
+    frame.goalPercent:SetTextColor(0.95, 0.68, 0.12)
+
+    frame.goalProgress = CreateFrame("StatusBar", nil, goalFrame, "BackdropTemplate")
+    frame.goalProgress:SetPoint("TOPLEFT", frame.goalTitle, "BOTTOMLEFT", 0, -12)
+    frame.goalProgress:SetPoint("RIGHT", goalFrame, "RIGHT", 0, 0)
+    frame.goalProgress:SetHeight(12)
+    frame.goalProgress:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    frame.goalProgress:SetStatusBarColor(0.85, 0.63, 0.16, 1)
+    frame.goalProgress:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+    frame.goalProgress:SetBackdropColor(0.12, 0.12, 0.14, 0.9)
+
+    frame.goalRemaining = goalFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.goalRemaining:SetPoint("TOPLEFT", frame.goalProgress, "BOTTOMLEFT", 0, -9)
+
+    local goalSeparator = goalFrame:CreateTexture(nil, "ARTWORK")
+    goalSeparator:SetPoint("TOPLEFT", frame.goalRemaining, "BOTTOMLEFT", 0, -18)
+    goalSeparator:SetPoint("RIGHT", goalFrame, "RIGHT", 0, 0)
+    goalSeparator:SetHeight(1)
+    goalSeparator:SetColorTexture(0.45, 0.34, 0.12, 0.65)
+
+    local goalInputLabel = goalFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    goalInputLabel:SetPoint("TOPLEFT", goalSeparator, "BOTTOMLEFT", 0, -14)
+    goalInputLabel:SetText("SAVINGS TARGET (GOLD)")
+    goalInputLabel:SetTextColor(0.75, 0.68, 0.5)
+
+    frame.goalInput = CreateFrame("EditBox", nil, goalFrame, "InputBoxTemplate")
+    frame.goalInput:SetPoint("TOPLEFT", goalInputLabel, "BOTTOMLEFT", 5, -8)
+    frame.goalInput:SetSize(170, 28)
+    frame.goalInput:SetAutoFocus(false)
+    frame.goalInput:SetNumeric(false)
+    frame.goalInput:SetMaxLetters(14)
+    frame.goalInput:SetScript("OnEnterPressed", function(self) GoldTracker:SetSavingsGoal(self:GetText()) end)
+    frame.goalInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+    local setGoalButton = CreateFrame("Button", nil, goalFrame, "GameMenuButtonTemplate")
+    setGoalButton:SetPoint("LEFT", frame.goalInput, "RIGHT", 10, 0)
+    setGoalButton:SetSize(82, 25)
+    setGoalButton:SetText("Set Goal")
+    setGoalButton:SetScript("OnClick", function() GoldTracker:SetSavingsGoal(frame.goalInput:GetText()) end)
+
+    frame.goalClearButton = CreateFrame("Button", nil, goalFrame, "GameMenuButtonTemplate")
+    frame.goalClearButton:SetPoint("LEFT", setGoalButton, "RIGHT", 8, 0)
+    frame.goalClearButton:SetSize(82, 25)
+    frame.goalClearButton:SetText("Clear")
+    frame.goalClearButton:SetScript("OnClick", function() GoldTracker:ClearSavingsGoal() end)
+
+    frame.goalFeedback = goalFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.goalFeedback:SetPoint("TOPLEFT", frame.goalInput, "BOTTOMLEFT", -5, -12)
+
     frame.accountScrollChild = accountScrollChild
     frame.accountRows = {}
     frame.accountTrendFrame = trendFrame
+    frame.accountGoalFrame = goalFrame
     frame.accountSummaryWidgets = {
         frame.accountGold, frame.accountNet, accountSeparator, characterHeader,
         frame.goldHeader, frame.netHeader, accountScroll,
@@ -1029,23 +1231,31 @@ end
 
 function GoldTracker:UpdateAccountViewButtons()
     if not self.frame then return end
-    local summaryActive = self.accountView == "summary"
-    self.frame.summaryViewButton.label:SetTextColor(summaryActive and 1 or 0.55, summaryActive and 0.83 or 0.55, summaryActive and 0.35 or 0.55)
-    self.frame.trendsViewButton.label:SetTextColor(not summaryActive and 1 or 0.55, not summaryActive and 0.83 or 0.55, not summaryActive and 0.35 or 0.55)
+    local buttons = {
+        { button = self.frame.summaryViewButton, view = "summary" },
+        { button = self.frame.trendsViewButton, view = "trends" },
+        { button = self.frame.goalViewButton, view = "goal" },
+    }
+    for _, entry in ipairs(buttons) do
+        local active = self.accountView == entry.view
+        entry.button.label:SetTextColor(active and 1 or 0.55, active and 0.83 or 0.55, active and 0.35 or 0.55)
+    end
 end
 
 function GoldTracker:ShowAccountView(view)
     if not self.frame then return end
-    self.accountView = view == "trends" and "trends" or "summary"
-    local showSummary = self.accountView == "summary"
+    if view ~= "trends" and view ~= "goal" then view = "summary" end
+    self.accountView = view
+    local showSummary = view == "summary"
     for _, widget in ipairs(self.frame.accountSummaryWidgets) do
         if showSummary then widget:Show() else widget:Hide() end
     end
-    if showSummary then
-        self.frame.accountTrendFrame:Hide()
-    else
-        self.frame.accountTrendFrame:Show()
+    self.frame.accountTrendFrame:SetShown(view == "trends")
+    self.frame.accountGoalFrame:SetShown(view == "goal")
+    if view == "trends" then
         self:UpdateTrendDisplay()
+    elseif view == "goal" then
+        self:UpdateSavingsGoal()
     end
     self:UpdateAccountViewButtons()
 end

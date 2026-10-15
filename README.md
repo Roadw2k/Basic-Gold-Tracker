@@ -6,6 +6,7 @@ A lightweight World of Warcraft addon for tracking gold earned and spent across 
 
 - **Per-Character Tracking** - Each character has independent gold statistics
 - **Account Overview** - See the last known balance and all-time net for every tracked character, plus account-wide totals
+- **Savings Goal** - Set an account-wide gold target and track your progress, percentage, and remaining amount
 - **Session Statistics** - Track gold earned and spent during your current play session
 - **All-Time Statistics** - View total gold earned and spent across all sessions
 - **First Login Detection** - Won't count your starting gold as "earned" on first use
@@ -66,9 +67,20 @@ Displays your current gold amount in real-time.
 - **Daily Average and Best Day** - Quickly see longer-term performance
 - **7-Day Net Chart** - View positive and negative daily movement at a glance
 - **Detailed Tooltips** - Hover over a chart bar for that day's exact earned, spent, and net values
+- **Minimap Goal Progress** - View the account savings goal, percentage, progress bar, and remaining amount from the minimap hover panel
 - **Automatic Retention** - Keeps a rolling 90 days of compact history
 
 Historical trends begin accumulating after installing this release; previous cumulative totals cannot be assigned to past dates.
+
+### Savings Goal
+- Open the `GOAL` view in the Account Overview to set an account-wide target
+- Enter the target as a gold amount, such as `500000` or `500,000g`
+- The progress bar uses the combined last-known balance of all tracked characters
+- View the completion percentage, remaining gold, and current account balance
+- See the same goal progress and remaining amount in the minimap hover panel
+- Reaching the target shows how far the account is above the goal
+- An exciting one-time chat announcement celebrates each completed goal
+- Use `Clear` to remove the current goal without affecting any tracked statistics
 
 ## How It Works
 
@@ -117,6 +129,13 @@ GoldTracker has no third-party library dependencies; its interface and minimap b
 This addon is released under the MIT License. See LICENSE file for details.
 
 ## Changelog
+
+### Version 1.5
+- Added a persistent account-wide Savings Goal
+- Added a gold progress bar with completion percentage and remaining amount
+- Added Set Goal and Clear controls with formatted gold input support
+- Added goal-completion and above-target status messages
+- Added a one-time chat celebration when the account reaches its savings goal
 
 ### Version 1.4
 - Added account-wide daily trend history with 90-day retention
