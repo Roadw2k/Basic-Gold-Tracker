@@ -15,13 +15,24 @@ A lightweight World of Warcraft addon for tracking gold earned and spent across 
 - **Remembered Window Position** - The tracker reopens where you last moved it, including after login or `/reload`
 - **Persistent Data** - All data is saved between sessions and survives logouts
 
+## Compatibility
+
+Basic Gold Tracker has been tested successfully across the supported Retail and Classic World of Warcraft clients listed in the addon metadata.
+
+> **World of Warcraft Forever is not supported.** It is the only tested version on which the addon is currently known not to work.
+
 ## Installation
 
 ### Manual Installation
 
-1. Download the latest release
-2. Extract the `BasicGoldTracker` folder to your `World of Warcraft\_retail_\Interface\AddOns\` directory
-3. Restart World of Warcraft or type `/reload` in-game
+1. Download the latest release.
+2. Extract the `GoldTracker` folder into the appropriate addon directory:
+   - **Retail:** `World of Warcraft\_retail_\Interface\AddOns\`
+   - **Mists of Pandaria Classic:** `World of Warcraft\_classic_\Interface\AddOns\`
+   - **Classic Era:** `World of Warcraft\_classic_era_\Interface\AddOns\`
+3. Confirm the final path is `Interface\AddOns\GoldTracker\GoldTracker.toc`.
+4. Restart World of Warcraft or type `/reload` in-game.
+
 
 ## Usage
 
@@ -100,7 +111,10 @@ The addon tracks your gold balance continuously and updates statistics whenever 
 ## FAQ
 
 **Q: Does this track gold across all my characters?**  
-A: Each character has independent statistics. The addon tracks per-character, not account-wide.
+A: Yes. Each character has independent statistics, while the Account Overview, Trends, and Savings Goal combine data from all tracked characters.
+
+**Q: Does this work with World of Warcraft Forever?**  
+A: No. World of Warcraft Forever is currently the only tested version known to be incompatible.
 
 **Q: What happens on first login?**  
 A: The addon will record your starting gold as a baseline without adding it to "earned" statistics.
